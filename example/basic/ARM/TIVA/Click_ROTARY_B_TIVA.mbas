@@ -1,0 +1,118 @@
+'
+'Example for ROTARY_B Click
+'
+'    Date          : Jul 2018.
+'    Author        : Nenad Filipovic
+'
+'Test configuration TIVA :
+'    
+'    MCU              : TM4C129XNCZAD
+'    Dev. Board       : EasyMx PRO v7 for TIVA ARM
+'    ARM Compiler ver : v6.0.0.0
+'
+'---
+'
+'Description :
+'
+'The application is composed of three sections :
+'
+'- System Initialization - Initializes peripherals and set pins.
+'- Application Initialization - Initializes SPI driver, set initial states, set RST logic high and performs device configuration.
+'- Application Task - (code snippet) Show functionality of Rotary_B Click, rotating and turn on/off led's, using the SPI interface
+'
+'Additional Functions :
+'
+'- SPI
+'
+'
+program Click_ROTARY_B_TIVA
+
+include Click_ROTARY_B_types
+include Click_ROTARY_B_config
+
+dim
+    startStatus as uint8_t 
+    stateOld as uint8_t 
+    stateNew as uint8_t 
+    stateOldRotate as uint8_t 
+    stateNewRotate as uint8_t 
+    ledState as uint8_t 
+    ledData as uint16_t 
+    
+sub procedure systemInit() 
+
+    mikrobus_gpioInit(_MIKROBUS1, _MIKROBUS_PWM_PIN, _GPIO_INPUT) 
+    mikrobus_gpioInit(_MIKROBUS1, _MIKROBUS_INT_PIN, _GPIO_INPUT) 
+    mikrobus_gpioInit(_MIKROBUS1, _MIKROBUS_AN_PIN, _GPIO_INPUT) 
+    mikrobus_gpioInit(_MIKROBUS1, _MIKROBUS_RST_PIN, _GPIO_OUTPUT) 
+    mikrobus_gpioInit(_MIKROBUS1, _MIKROBUS_CS_PIN, _GPIO_OUTPUT) 
+    mikrobus_spiInit(_MIKROBUS1, @_ROTARYB_SPI_CFG[0]) 
+    Delay_100ms() 
+
+end sub
+
+sub procedure applicationInit() 
+
+    rotaryb_spiDriverInit(T_ROTARYB_P(@_MIKROBUS1_GPIO), T_ROTARYB_P(@_MIKROBUS1_SPI)) 
+    ledData = 0x0001 
+    stateOld = 0 
+    stateNew = 1 
+    stateOldRotate = 0 
+    stateNewRotate = 1 
+
+end sub
+
+sub procedure applicationTask() 
+
+    rotaryb_turnOnLedByData(ledData) 
+    if (rotaryb_buttonPush()) then 
+        stateNew = 1 
+        if (((stateNew = 1) and (stateOld = 0))) then 
+            stateOld = 1 
+            ledState = ((ledState + 1) mod 5) 
+            if ((ledState = 4)) then 
+                for stateOld = 0 to 17-1
+                    rotaryb_turnOnLedByData(0xAAAA) 
+                    Delay_100ms() 
+                    rotaryb_turnOnLedByData(0x5555) 
+                    Delay_100ms() 
+                next stateOld
+                for stateOld = 0 to 17-1
+                    rotaryb_turnOnLedByPosition(stateOld) 
+                    Delay_100ms() 
+                next stateOld
+                ledState = 0 
+                ledData = rotaryb_getLedData(ledState) 
+            else 
+                ledData = rotaryb_getLedData(ledState) 
+            end if
+        end if
+    else 
+        stateOld = 0 
+    end if
+    if ((rotaryb_getPWMstate() = rotaryb_getANstate())) then 
+        stateOldRotate = 0 
+        startStatus = (rotaryb_getPWMstate() and rotaryb_getANstate()) 
+    else 
+        stateNewRotate = 1 
+        if ((stateNewRotate <> stateOldRotate)) then 
+            stateOldRotate = 1 
+            if ((startStatus <> rotaryb_getPWMstate())) then 
+                ledData = ((ledData << 1) or (ledData >> 15)) 
+            else 
+                ledData = ((ledData >> 1) or (ledData << 15)) 
+            end if
+        end if
+    end if
+
+end sub
+
+main :
+
+    systemInit() 
+    applicationInit() 
+    while (1) 
+        applicationTask() 
+    wend
+
+end.

@@ -1,0 +1,137 @@
+{*
+Example for ROTARY_B Click
+
+    Date          : Jul 2018.
+    Author        : Nenad Filipovic
+
+Test configuration MSP :
+    
+    MCU              : MSP432
+    Dev. Board       : Clicker 2 for MSP432
+    ARM Compiler ver : v6.0.0.0
+
+---
+
+Description :
+
+The application is composed of three sections :
+
+- System Initialization - Initializes peripherals and set pins.
+- Application Initialization - Initializes SPI driver, set initial states, set RST logic high and performs device configuration.
+- Application Task - (code snippet) Show functionality of Rotary_B Click, rotating and turn on/off led's, using the SPI interface
+
+Additional Functions :
+
+- SPI
+
+*}
+program Click_ROTARY_B_MSP;
+
+uses Click_ROTARY_B_types, Click_ROTARY_B_config;
+
+var
+    startStatus : uint8_t; 
+    stateOld : uint8_t; 
+    stateNew : uint8_t; 
+    stateOldRotate : uint8_t; 
+    stateNewRotate : uint8_t; 
+    ledState : uint8_t; 
+    ledData : uint16_t; 
+    
+procedure systemInit(); 
+begin
+
+    mikrobus_gpioInit(_MIKROBUS1, _MIKROBUS_PWM_PIN, _GPIO_INPUT); 
+    mikrobus_gpioInit(_MIKROBUS1, _MIKROBUS_INT_PIN, _GPIO_INPUT); 
+    mikrobus_gpioInit(_MIKROBUS1, _MIKROBUS_AN_PIN, _GPIO_INPUT); 
+    mikrobus_gpioInit(_MIKROBUS1, _MIKROBUS_RST_PIN, _GPIO_OUTPUT); 
+    mikrobus_gpioInit(_MIKROBUS1, _MIKROBUS_CS_PIN, _GPIO_OUTPUT); 
+    mikrobus_spiInit(_MIKROBUS1, @_ROTARYB_SPI_CFG[0]); 
+    Delay_100ms(); 
+
+end;
+
+procedure applicationInit(); 
+begin
+
+    rotaryb_spiDriverInit(T_ROTARYB_P(@_MIKROBUS1_GPIO), T_ROTARYB_P(@_MIKROBUS1_SPI)); 
+    ledData := 0x0001; 
+    stateOld := 0; 
+    stateNew := 1; 
+    stateOldRotate := 0; 
+    stateNewRotate := 1; 
+
+end;
+
+procedure applicationTask(); 
+begin
+
+    rotaryb_turnOnLedByData(ledData); 
+    if (rotaryb_buttonPush()) then 
+    begin
+        stateNew := 1; 
+        if (((stateNew = 1) and (stateOld = 0))) then 
+        begin
+            stateOld := 1; 
+            ledState := ((ledState + 1) mod 5); 
+            if ((ledState = 4)) then 
+            begin
+                for stateOld := 0 to 17-1 do 
+                begin
+                    rotaryb_turnOnLedByData(0xAAAA); 
+                    Delay_100ms(); 
+                    rotaryb_turnOnLedByData(0x5555); 
+                    Delay_100ms(); 
+                end;
+                for stateOld := 0 to 17-1 do 
+                begin
+                    rotaryb_turnOnLedByPosition(stateOld); 
+                    Delay_100ms(); 
+                end;
+                ledState := 0; 
+                ledData := rotaryb_getLedData(ledState); 
+            end
+            else 
+            begin
+                ledData := rotaryb_getLedData(ledState); 
+            end;
+        end; 
+    end
+    else 
+    begin
+        stateOld := 0; 
+    end;
+    if ((rotaryb_getPWMstate() = rotaryb_getANstate())) then 
+    begin
+        stateOldRotate := 0; 
+        startStatus := (rotaryb_getPWMstate() and rotaryb_getANstate()); 
+    end
+    else 
+    begin
+        stateNewRotate := 1; 
+        if ((stateNewRotate <> stateOldRotate)) then 
+        begin
+            stateOldRotate := 1; 
+            if ((startStatus <> rotaryb_getPWMstate())) then 
+            begin
+                ledData := ((ledData shl 1) or (ledData shr 15)); 
+            end
+            else 
+            begin
+                ledData := ((ledData shr 1) or (ledData shl 15)); 
+            end;
+        end; 
+    end;
+
+end;
+
+begin
+
+    systemInit(); 
+    applicationInit(); 
+    while (1) do 
+    begin 
+        applicationTask(); 
+    end;
+
+end.
